@@ -1,0 +1,550 @@
+import requests
+import json
+import pandas as pd
+#from io import StringIO
+from google.cloud import storage,bigquery
+#from google.oauth2 import service_account
+#import os
+
+def getToken():
+    data = {
+        'grant_type': 'password',
+        'client_id': '3MVG99OxTyEMCQ3iWf9X9sIetiXyBl9uKyHSPNNw2IDoJsbsmdz_NUzoIMX4lb3FFNJArwqq.QJq1UT7MNtob',
+        'client_secret': '1505522004753842015',
+        'username': 'openplatform_mercadopago@mercadolibre.com.sales',
+        'password': 'M3L12021inter.gaOh2JyIhb5rZN6q0ey4ha4BA'
+    }
+    resp = requests.post('https://login.salesforce.com/services/oauth2/token',data=data)
+    return resp.json()['access_token']
+
+
+def main():
+    print('Arranco')
+    delim = '&#'
+    base_url = 'https://meli.my.salesforce.com/'
+    HEADERS = 'SIT_SITE_ID&#CUS_CUST_ID_SEL&#ITE_OFFICIAL_STORE_ID&#SEL_TAGS&#FUNCION_EQUIPO&#ASESOR&#ASESOR_ID&#SEGMENTO&#TIPOFOCO&#GRUPO_CUENTAS&#ACCOUNT_NAME&#PARENT_NAME&#PARENT_CUST_ID&#INDUSTRY_NAME&#INDUSTRY_DESCRIPTION&#AGRUPADOR_REGIONAL&#MARCA&#INDUSTRY_SUBSEGMENT&#SHARE_OF_CHECKOUT&#DATE_M0&#DATE_M1&#ACCOUNT_STATUS&#CX_PREMIUM&#CANCELLATION_REASON&#PAY_MARKETPLACE_ID&#PAY_SPONSOR_ID&#FECHA_DESDE'
+    Asesores = ['Asesor_MKTPL__r','Asesor_CLASIF__r','Asesor_MENVIOS__r','Asesor_MPAGO__r','Asesor_MPAGO_OFF__r','Asesor_MSHOPS__r','Asesor_PUBLI__r','NO_SEGMENT']
+    start_substr_asesor='Asesor_'
+    end_substr_asesor = '__'
+    first_url = 'https://meli.my.salesforce.com/services/data/v41.0/query/?q='
+    query = "SELECT+Name,Account_Tags__c,Cuenta__r.Name,Es_franquicia__c,Cuenta__r.Cust_Id__c,Cuenta__r.Pa_s__c,Cuenta__r.Parent.Name,Official_Store_Id__c,Asesor_MKTPL__r.Name,Asesor_MKTPL__r.Id,Asesor_CLASIF__r.Name,Asesor_CLASIF__r.Id,Asesor_MENVIOS__r.Name,Asesor_MENVIOS__r.Id,Asesor_MPAGO__r.Name,Asesor_MPAGO__r.Id,Asesor_MPAGO_OFF__r.Name,Asesor_MPAGO_OFF__r.Id,Asesor_MSHOPS__r.Name,Asesor_MSHOPS__r.Id,Asesor_PUBLI__r.Name,Asesor_PUBLI__r.Id,Tipo_de_Foco__c,Vertical__c,Grupo_de_Cuentas__r.Name,Industria__r.Name,Industria__r.Descripcion__c,Agrupador_Regional__r.Name,Marca__c,Share_of_Checkout__c,Data_M1__c,Estado__c,Motivo_de_baja__c,Premium_CX__c,Data_Legado__c,Industria_y_Subsegmento__c,ParentAccount__r.Cust_id__c,Marketplace_Id__c,Sponsor_Id__c ,CreatedDate,Industry_Sector__c,+FROM+Registro_de_Cambio_en_Cuenta__c+WHERE+CreatedDate=LAST_N_DAYS:5+AND+Cust_id__c != Null+AND+CreatedBy.Name != 'Integración Publicidad Mulesoft'"
+    final_url = first_url + query
+    access_token = getToken()
+    print('Tomo Token')
+    Iterar = True
+    lineasProcesadas = 0
+    reg_leidos = 0
+
+    resultados = []
+    # df_results = pd.DataFrame(columns=['SIT_SITE_ID','CUS_CUST_ID_SEL','ITE_OFFICIAL_STORE_ID','SEL_TAGS','FUNCION_EQUIPO','ASESOR','ASESOR_ID','SEGMENTO','TIPOFOCO','GRUPO_CUENTAS','ACCOUNT_NAME','PARENT_NAME','PARENT_CUST_ID','INDUSTRY_NAME','INDUSTRY_DESCRIPTION','AGRUPADOR_REGIONAL','MARCA','INDUSTRY_SUBSEGMENT','SHARE_OF_CHECKOUT','DATE_M0','DATE_M1','ACCOUNT_STATUS','CX_PREMIUM','CANCELLATION_REASON','PAY_MARKETPLACE_ID','PAY_SPONSOR_ID','FECHA_DESDE’,’INDUSTRY_SECTOR_C'])
+    while Iterar is True:
+        resp = requests.get(final_url,headers={'Authorization': 'Bearer ' + access_token})
+        results = resp.json()
+        reg_leidos += len(results['records'])
+        print('Registros leidos: ' + str(reg_leidos))
+        for registro in results['records']:
+            for asc in Asesores:
+                if asc in registro or asc == 'NO_SEGMENT':
+                    objeto = []
+
+                    # SIT_SITE_ID 
+                    try:
+                        objeto.append(str(registro['Cuenta__r']['Pa_s__c']))
+                    except:
+                        objeto.append('')
+
+                    # CUENTA_PADRE 
+                    """try:
+                        objeto.append(str(registro['Grupo_de_Cuentas__r']))
+                    except:
+                        objeto.append('')        
+                    """
+                    # CUS_CUST_ID_SEL 
+                    try:
+                        objeto.append(str(registro['Cuenta__r']['Cust_ID__c']))
+                    except:
+                        objeto.append('')  
+
+                    # ITE_OFFICIAL_STORE_ID 
+                    try:
+                        objeto.append(str(registro['Official_Store_Id__c']))
+                    except:
+                        objeto.append('') 
+
+                    # SEL_TAGS 
+                    try:
+                        objeto.append(str(registro['Account_Tags__c']))
+                    except:
+                        objeto.append('')    
+
+                    # FUNCION_EQUIPO 
+                    try:
+                        objeto.append(str(registro['Vertical__c']))
+                    except:
+                        objeto.append('')     
+
+                    # ASESOR 
+                    try:
+                        objeto.append(str(registro[asc]['Name']))
+                    except:
+                        objeto.append('')   
+
+                    # ASESOR_ID 
+                    try:
+                        objeto.append(str(registro[asc]['Id']))
+                    except:
+                        objeto.append('')   
+
+                    # SEGMENTO 
+                    try:
+                        if asc == 'NO_SEGMENT':
+                            objeto.append('NO_SEGMENT')
+                        else:
+                            objeto.append(str((asc.split(start_substr_asesor))[1].split(end_substr_asesor)[0]))
+                    except:
+                        objeto.append('')      
+
+                    # TIPOFOCO 
+                    try:
+                        objeto.append(str(registro['Tipo_de_Foco__c']))
+                    except:
+                        objeto.append('')             
+
+                    # GRUPO_CUENTAS 
+                    try:
+                        if 'attributes' in registro['Grupo_de_Cuentas__r']: 
+                            objeto.append(str(registro['Cuenta__r']['Name']))
+                        else:
+                            objeto.append(str(registro['Grupo_de_Cuentas__r']))
+                    except:
+                        objeto.append('')                  
+                    
+                    # ACCOUNT_NAME 
+                    try:
+                        objeto.append(str(registro['Cuenta__r']['Name']))
+                    except:
+                        objeto.append('')
+
+                    # PARENT_NAME 
+                    try:
+                        objeto.append(str(registro['Cuenta__r']['Parent']['Name']))
+                    except:
+                        objeto.append('')
+                    
+                    # PARENT_CUST_ID
+                    try:
+                        objeto.append(str(registro['ParentAccount__r']['Cust_id__c']))
+                    except:
+                        objeto.append('')    
+                        
+                    # INDUSTRY_NAME 
+                    try:
+                        objeto.append(str(registro['Industria__r']['Name']))
+                    except:
+                        objeto.append('') 
+                        
+                    # INDUSTRY_DESCRIPTION 
+                    try:
+                        objeto.append(str(registro['Industria__r']['Descripcion__c']))
+                    except:
+                        objeto.append('')   
+                    
+                    # AGRUPADOR_REGIONAL
+                    try:
+                        objeto.append(str(registro['Agrupador_Regional__r']['Name']))
+                    except:
+                        objeto.append('')   
+ 
+                    # MARCA
+                    try:
+                        objeto.append(str(registro['Marca__c']))
+                    except:
+                        objeto.append('')   
+
+                    # INDUSTRIA_SUBSEGMENTO
+                    try:
+                        objeto.append(str(registro['Industria_y_Subsegmento__c']))
+                    except:
+                        objeto.append('')   
+
+                    # SHARE_OF_CHECKOUT
+                    try:
+                        objeto.append(str(registro['Share_of_Checkout__c']))
+                    except:
+                        objeto.append('')   
+
+                    # DATA_M0
+                    try:
+                        objeto.append(str(registro['Data_Legado__c']))
+                    except:
+                        objeto.append('')   
+
+                    # DATA_M1
+                    try:
+                        objeto.append(str(registro['Data_M1__c']))
+                    except:
+                        objeto.append('')   
+
+                    # ACCOUNT_STATUS
+                    try:
+                        objeto.append(str(registro['Estado__c']))
+                    except:
+                        objeto.append('')     
+
+                    # CX_PREMIUM
+                    try:
+                        objeto.append(str(registro['Premium_CX__c']))
+                    except:
+                        objeto.append('')
+
+                    # MOTIVO_DE_CANCELACION
+                    try:
+                        objeto.append(str(registro['Motivo_de_baja__c']))
+                    except:
+                        objeto.append('') 
+
+                    # PAY_MARKETPLACE_ID
+                    try:
+                        objeto.append(str(registro['Marketplace_Id__c']))
+                    except:
+                        objeto.append('')
+
+                    # PAY_SPONSOR_ID
+                    try:
+                        objeto.append(str(registro['Sponsor_Id__c']))
+                    except:
+                        objeto.append('')   
+
+                    # CREATED_DATE 
+                    try:
+                        objeto.append(str(registro['CreatedDate']))
+                    except:
+                        objeto.append('') 
+
+				# INDUSTRY_SECTOR_C 
+                    try:
+                        objeto.append(str(registro['Industry_Sector__c']))
+                    except:
+                        objeto.append('')   
+                        
+                    #ID_CUENTA
+
+                    try:
+                        id_account= registro.get('Cuenta__r',{}).get('attributes',{}).get('url').split('/')[-1]
+                        objeto.append(id_account)
+                    except:
+                        objeto.append('')
+                        #ES_FRANQUICIA
+                    try:
+                            objeto.append(str(registro['Es_franquicia__c']))
+                    except:
+                            objeto.append('')
+
+                    objeto = ['' if x=='None' else x for x in objeto]
+                    linea = '\n' + delim.join(objeto)
+                    #df_results.loc[lineasProcesadas] = objeto
+
+                    resultados.append(objeto)
+
+                    lineasProcesadas += 1
+
+        if 'nextRecordsUrl' in results:
+            final_url = base_url + results['nextRecordsUrl']
+        else:
+            Iterar = False
+    print('Resultados: ' + str(results['totalSize']))
+    print('Lineas procesadas: ' + str(lineasProcesadas))
+
+    df_results_bq = pd.DataFrame( resultados , columns=['SIT_SITE_ID','CUS_CUST_ID_SEL','ITE_OFFICIAL_STORE_ID','SEL_TAGS','FUNCION_EQUIPO','ASESOR','ASESOR_ID','SEGMENTO','TIPOFOCO','GRUPO_CUENTAS','ACCOUNT_NAME','PARENT_NAME','PARENT_CUST_ID','INDUSTRY_NAME','INDUSTRY_DESCRIPTION','AGRUPADOR_REGIONAL','MARCA','INDUSTRY_SUBSEGMENT','SHARE_OF_CHECKOUT','DATE_M0','DATE_M1','ACCOUNT_STATUS','CX_PREMIUM','CANCELLATION_REASON','PAY_MARKETPLACE_ID','PAY_SPONSOR_ID','FECHA_DESDE','INDUSTRY_SECTOR_C','ID_CUENTA', 'ES_FRANQUICIA']  )
+
+    #df_results_bq = df_results
+
+    storage_client = connections['ETL_GCP'].storage_client
+    bucket = storage_client.get_bucket("bi-batch-load")
+    blob = bucket.blob("LK_CARTERA_GESTIONADA/LK_CARTERA_GESTIONADA_CAMBIOS.json")
+    blob.upload_from_string(data=df_results_bq.to_json(orient="records",lines=True, double_precision = 4))
+
+    return
+
+main()
+10:05
+account
+10:06
+import requests
+import json
+import pandas as pd
+from io import StringIO
+from google.cloud import storage,bigquery
+#from google.oauth2 import service_account
+import os
+
+
+def getToken():
+    data = {
+        'grant_type': 'password',
+        'client_id': '3MVG99OxTyEMCQ3iWf9X9sIetiXyBl9uKyHSPNNw2IDoJsbsmdz_NUzoIMX4lb3FFNJArwqq.QJq1UT7MNtob',
+        'client_secret': '1505522004753842015',
+        'username': 'openplatform_mercadopago@mercadolibre.com.sales',
+        'password': 'M3L12021inter.gaOh2JyIhb5rZN6q0ey4ha4BA'
+    }
+    resp = requests.post('https://login.salesforce.com/services/oauth2/token',data=data)
+    return resp.json()['access_token']
+
+
+def main():
+
+    delim = '&#'
+    base_url = 'https://meli.my.salesforce.com/'
+    HEADERS = 'SIT_SITE_ID&#CUS_CUST_ID_SEL&#ITE_OFFICIAL_STORE_ID&#SEL_TAGS&#FUNCION_EQUIPO&#ASESOR&#ASESOR_ID&#SEGMENTO&#TIPOFOCO&#GRUPO_CUENTAS&#ACCOUNT_NAME&#PARENT_NAME&#PARENT_CUST_ID&#INDUSTRY_NAME&#INDUSTRY_DESCRIPTION&#AGRUPADOR_REGIONAL&#MARCA&#INDUSTRY_SUBSEGMENT&#SHARE_OF_CHECKOUT&#DATE_M0&#DATE_M1&#ACCOUNT_STATUS&#CX_PREMIUM&#CANCELLATION_REASON&#PAY_MARKETPLACE_ID&#PAY_SPONSOR_ID&#FECHA_DESDE#INDUSTRY'
+    Asesores = ['Asesor_MKTPL__r','Asesor_CLASIF__r','Asesor_MENVIOS__r','Asesor_MPAGO__r','Asesor_MPAGO_OFF__r','Asesor_MSHOPS__r','Asesor_PUBLI__r','NO_SEGMENT']
+    start_substr_asesor='Asesor_'
+    end_substr_asesor = '__'
+    #AWS_SERVER_PUBLIC_KEY = 'AKIAZE4F2HCI2RECFW5U'
+    #AWS_SERVER_SECRET_KEY = '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'
+    AWS_S3_BUCKET = 'bi-migrador'
+
+    first_url = 'https://meli.my.salesforce.com/services/data/v41.0/query/?q='
+    #query = "SELECT+Name,Account_Tags__c,Cuenta__r.Name,Cuenta__r.Cust_Id__c,Cuenta__r.Pa_s__c,Cuenta__r.Parent.Name,Official_Store_Id__c,Asesor_MKTPL__r.Name,Asesor_MKTPL__r.Id,Asesor_CLASIF__r.Name,Asesor_CLASIF__r.Id,Asesor_MENVIOS__r.Name,Asesor_MENVIOS__r.Id,Asesor_MPAGO__r.Name,Asesor_MPAGO__r.Id,Asesor_MSHOPS__r.Name,Asesor_MSHOPS__r.Id,Asesor_PUBLI__r.Name,Asesor_PUBLI__r.Id,Tipo_de_Foco__c,Vertical__c,Grupo_de_Cuentas__r.Name,CreatedDate,Industry+FROM+Registro_de_Cambio_en_Cuenta__c+WHERE+CreatedDate=LAST_N_DAYS:2" 
+    query = "SELECT+Name,Account_Tags__c,Es_franquicia__c,Cust_Id__c,Pa_s__c,Parent.Name,Official_Store_Id__c,Asesor_MKTPL__r.Name,Asesor_MKTPL__r.Id,Asesor_CLASIF__r.Name,Asesor_CLASIF__r.Id,Asesor_MENVIOS__r.Name,Asesor_MENVIOS__r.Id,Asesor_MPAGO__r.Name,Asesor_MPAGO__r.Id,Asesor_MPAGO_OFF__r.Name,Asesor_MPAGO_OFF__r.Id,Asesor_MSHOPS__r.Name,Asesor_MSHOPS__r.Id,Asesor_PUBLI__r.Name,Asesor_PUBLI__r.Id,Tipo_de_Foco__c,Vertical__c,Grupo_de_Cuentas__r.Name,Industria__r.Name,Industria__r.Descripcion__c,Agrupador_Regional__r.Name,Marca__c,Share_of_Checkout__c,Data_M1__c,Estado__c,Motivo_de_baja__c,Premium_CX__c,Data_Legado__c,Industria_y_Subsegmento__c,Parent.Cust_id__c,Marketplace_Id__c,Sponsor_Name__c,CreatedDate,Industry+FROM+Account+WHERE+CreatedDate=LAST_N_DAYS:5+AND+Cust_id__c != Null+AND+CreatedBy.Name != 'Integración Publicidad Mulesoft'"
+    final_url = first_url + query
+    access_token = getToken()
+    Iterar = True
+    lineasProcesadas = 0
+    reg_leidos = 0
+
+    # df_results = pd.DataFrame(columns=['SIT_SITE_ID','CUS_CUST_ID_SEL','ITE_OFFICIAL_STORE_ID','SEL_TAGS','FUNCION_EQUIPO','ASESOR','ASESOR_ID','SEGMENTO','TIPOFOCO','GRUPO_CUENTAS','ACCOUNT_NAME','PARENT_NAME','PARENT_CUST_ID','INDUSTRY_NAME','INDUSTRY_DESCRIPTION','AGRUPADOR_REGIONAL','MARCA','INDUSTRY_SUBSEGMENT','SHARE_OF_CHECKOUT','DATE_M0','DATE_M1','ACCOUNT_STATUS','CX_PREMIUM','CANCELLATION_REASON','PAY_MARKETPLACE_ID','PAY_SPONSOR_ID','FECHA_DESDE’,'INDUSTRY'])
+
+    resultados = []
+
+    while Iterar is True:
+        resp = requests.get(final_url,headers={'Authorization': 'Bearer ' + access_token})
+        results = resp.json()
+        reg_leidos += len(results['records'])
+        print('Registros leidos: ' + str(reg_leidos))
+        
+        for registro in results['records']:
+            for asc in Asesores:
+                if asc in registro or asc == 'NO_SEGMENT':
+                    objeto = []
+
+                    # SIT_SITE_ID 
+                    try:
+                        objeto.append(str(registro['Pa_s__c']))
+                    except:
+                        objeto.append('')
+
+                    # CUENTA_PADRE 
+                    """try:
+                        objeto.append(str(registro['Grupo_de_Cuentas__r']))
+                    except:
+                        objeto.append('')        
+                    """
+                    # CUS_CUST_ID_SEL 
+                    try:
+                        objeto.append(str(registro['Cust_ID__c']))
+                    except:
+                        objeto.append('')  
+
+                    # ITE_OFFICIAL_STORE_ID 
+                    try:
+                        objeto.append(str(registro['Official_Store_Id__c']))
+                    except:
+                        objeto.append('') 
+
+                    # SEL_TAGS 
+                    try:
+                        objeto.append(str(registro['Account_Tags__c']))
+                    except:
+                        objeto.append('')    
+
+                    # FUNCION_EQUIPO 
+                    try:
+                        objeto.append(str(registro['Vertical__c']))
+                    except:
+                        objeto.append('')     
+
+                    # ASESOR 
+                    try:
+                        objeto.append(str(registro[asc]['Name']))
+                    except:
+                        objeto.append('')   
+
+                    # ASESOR_ID 
+                    try:
+                        objeto.append(str(registro[asc]['Id']))
+                    except:
+                        objeto.append('')   
+
+                    # SEGMENTO 
+                    try:
+                        if asc == 'NO_SEGMENT':
+                            objeto.append('NO_SEGMENT')
+                        else:
+                            objeto.append(str((asc.split(start_substr_asesor))[1].split(end_substr_asesor)[0]))
+                    except:
+                        objeto.append('')      
+
+                    # TIPOFOCO 
+                    try:
+                        objeto.append(str(registro['Tipo_de_Foco__c']))
+                    except:
+                        objeto.append('')             
+
+                    # GRUPO_CUENTAS 
+                    try:
+                        if 'attributes' in registro['Grupo_de_Cuentas__r']: 
+                            objeto.append(str(registro['Cuenta__r']['Name']))
+                        else:
+                            objeto.append(str(registro['Grupo_de_Cuentas__r']))
+                    except:
+                        objeto.append('')                  
+                    
+                    # ACCOUNT_NAME 
+                    try:
+                        objeto.append(str(registro['Name']))
+                    except:
+                        objeto.append('')
+
+                    # PARENT_NAME 
+                    try:
+                        objeto.append(str(registro['Parent']['Name']))
+                    except:
+                        objeto.append('')
+
+                    # PARENT_CUST_ID
+                    try:
+                        objeto.append(str(registro['Parent']['Cust_id__c']))
+                    except:
+                        objeto.append('')
+                        
+                    # INDUSTRY_NAME 
+                    try:
+                        objeto.append(str(registro['Industria__r']['Name']))
+                    except:
+                        objeto.append('')   
+                        
+                    # INDUSTRY_DESCRIPTION 
+                    try:
+                        objeto.append(str(registro['Industria__r']['Descripcion__c']))
+                    except:
+                        objeto.append('')   
+                    
+                    # AGRUPADOR_REGIONAL
+                    try:
+                        objeto.append(str(registro['Agrupador_Regional__r']['Name']))
+                    except:
+                        objeto.append('')   
+
+                    # MARCA
+                    try:
+                        objeto.append(str(registro['Marca__c']))
+                    except:
+                        objeto.append('')   
+
+                    # INDUSTRIA_SUBSEGMENTO
+                    try:
+                        objeto.append(str(registro['Industria_y_Subsegmento__c']))
+                    except:
+                        objeto.append('')   
+
+                    # SHARE_OF_CHECKOUT
+                    try:
+                        objeto.append(str(registro['Share_of_Checkout__c']))
+                    except:
+                        objeto.append('')   
+
+                    # DATA_M0
+                    try:
+                        objeto.append(str(registro['Data_Legado__c']))
+                    except:
+                        objeto.append('')   
+
+                    # DATA_M1
+                    try:
+                        objeto.append(str(registro['Data_M1__c']))
+                    except:
+                        objeto.append('')   
+
+                    # ACCOUNT_STATUS
+                    try:
+                        objeto.append(str(registro['Estado__c']))
+                    except:
+                        objeto.append('')     
+
+                    # CX_PREMIUM
+                    try:
+                        objeto.append(str(registro['Premium_CX__c']))
+                    except:
+                        objeto.append('')
+
+                    # MOTIVO_DE_CANCELACION
+                    try:
+                        objeto.append(str(registro['Motivo_de_baja__c']))
+                    except:
+                        objeto.append('') 
+
+                    # PAY_MARKETPLACE_ID
+                    try:
+                        objeto.append(str(registro['Marketplace_Id__c']))
+                    except:
+                        objeto.append('')
+
+                    # PAY_SPONSOR_ID
+                    try:
+                        objeto.append(str(registro['Sponsor_Name__c']))
+                    except:
+                        objeto.append('')
+
+                    # CREATED_DATE 
+                    try:
+                        objeto.append(str(registro['CreatedDate']))
+                    except:
+                        objeto.append('')     
+
+				# INDUSTRY
+                    try:
+                        objeto.append(str(registro['Industry']))
+                    except:
+                        objeto.append('')    
+                    #ID_CUENTA
+
+                    try:
+                        id_account= registro.get('Cuenta__r',{}).get('attributes',{}).get('url').split('/')[-1]
+                        objeto.append(id_account)
+                    except:
+                        objeto.append('')
+                        
+                    # ES_FRANQUICIA
+                    try:
+                        objeto.append(str(registro['Es_franquicia__c']))
+                    except:
+                        objeto.append('')  
+                    
+                    objeto = ['' if x=='None' else x for x in objeto]
+                    linea = '\n' + delim.join(objeto)
+                    #df_results.loc[lineasProcesadas] = objeto
+                    resultados.append(objeto)
+                    lineasProcesadas += 1
+
+        if 'nextRecordsUrl' in results:
+            final_url = base_url + results['nextRecordsUrl']
+        else:
+            Iterar = False
+    
+    #print(df_results.head())
+    print('Resultados: ' + str(results['totalSize']))
+    print('Lineas procesadas: ' + str(lineasProcesadas))
+10:06
+    df_results_bq = pd.DataFrame(resultados, columns=['SIT_SITE_ID','CUS_CUST_ID_SEL','ITE_OFFICIAL_STORE_ID','SEL_TAGS','FUNCION_EQUIPO','ASESOR','ASESOR_ID','SEGMENTO','TIPOFOCO','GRUPO_CUENTAS','ACCOUNT_NAME','PARENT_NAME','PARENT_CUST_ID','INDUSTRY_NAME','INDUSTRY_DESCRIPTION','AGRUPADOR_REGIONAL','MARCA','INDUSTRY_SUBSEGMENT','SHARE_OF_CHECKOUT','DATE_M0','DATE_M1','ACCOUNT_STATUS','CX_PREMIUM','CANCELLATION_REASON','PAY_MARKETPLACE_ID','PAY_SPONSOR_ID','FECHA_DESDE','INDUSTRY_SECTOR_C','ID_CUENTA','ES_FRANQUICIA'])
+    #df_results_bq = df_results
+    
+    print(df_results_bq.head())
+    
+    storage_client = connections['ETL_GCP'].storage_client
+    bucket = storage_client.get_bucket("bi-batch-load")
+    blob = bucket.blob("LK_CARTERA_GESTIONADA/LK_CARTERA_GESTIONADA.json")
+    blob.upload_from_string(data=df_results_bq.to_json(orient="records",lines=True, double_precision = 4))
+
+    return
+
+main()
